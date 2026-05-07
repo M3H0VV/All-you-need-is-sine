@@ -13,7 +13,7 @@ from src.visualizer import Visualizer
 st.set_page_config(
     page_title="All You Need Is Sine",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
 
 # Custom styling
@@ -104,7 +104,7 @@ Miłego odkrywania! 🎵
 st.sidebar.header("🎚️ Parametry STFT")
 st.sidebar.markdown("Zmień parametry matematyczne analizy. Mniejsze okno to lepsza precyzja w czasie, większe - w częstotliwości.")
 
-n_fft_selection = st.sidebar.select_slider("Rozmiar okna (Window size) M", options=[512, 1024, 2048, 4096, 8192, "Całość"], value=2048)
+n_fft_selection = st.sidebar.select_slider("Rozmiar okna (Window size) M", options=[512, 1024, 2048, 4096, 8192, "Wszystkie próbki (FT)"], value=2048)
 hop_length_selection = st.sidebar.select_slider("Długość skoku (Hop length) H", options=[256, 512, 1024], value=512)
 
 # ============================================================================
@@ -123,7 +123,7 @@ st.header("📁 Wybierz źródło dźwięku")
 
 source_option = st.radio(
     "Wybierz źródło",
-    ("Wgraj własny plik", "Wybierz z biblioteki sampli"),
+    ("Wgraj własny plik", "Wybierz z biblioteki sampli", "Nagraj dźwięk (Mikrofon)"),
     horizontal=True,
     label_visibility="collapsed"
 )
@@ -142,7 +142,7 @@ uploaded_file = None
 
 if source_option == "Wgraj własny plik":
     uploaded_file = st.file_uploader("Wybierz plik audio", type=["wav", "mp3", "amr"], label_visibility="collapsed")
-else:
+elif source_option == "Wybierz z biblioteki sampli":
     SAMPLES_DIR = "samples"
     try:
         sample_files = sorted([f for f in os.listdir(SAMPLES_DIR) if f.endswith(('.wav', '.mp3'))])
@@ -164,49 +164,30 @@ else:
                 uploaded_file = FileObject(name=selected_sample, data=file_bytes)
     except FileNotFoundError:
         st.error(f"Nie znaleziono folderu z samplami: '{SAMPLES_DIR}'")
+elif source_option == "Nagraj dźwięk (Mikrofon)":
+    uploaded_file = st.audio_input("Nagraj swój głos lub dźwięk", label_visibility="collapsed")
 
 if uploaded_file is not None:
-    # 1. Ograniczenie rozmiaru wgranego pliku (np. max 10 MB)
-    MAX_FILE_SIZE_MB = 10
+    # 1. Ograniczenie rozmiaru wgranego pliku (np. max 15 MB)
+    MAX_FILE_SIZE_MB = 15
     if uploaded_file.size > MAX_FILE_SIZE_MB * 1024 * 1024:
         st.error(f"❌ Plik jest za duży ({uploaded_file.size / (1024*1024):.2f} MB). Maksymalny dopuszczalny rozmiar to {MAX_FILE_SIZE_MB} MB.")
         st.stop()
 
     # Save to temporary file
     with st.spinner("Ładowanie pliku audio..."):
-        # Wyciągnięcie prawdziwego rozszerzenia z wgrywanego pliku
-        ext = os.path.splitext(uploaded_file.name)[1].lower()
-        if not ext:
-            ext = ".wav"
-        temp_path = f"temp_audio{ext}"
-        
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_file.getvalue())
-        
-        # Load audio
-        try:
-            audio, sr = load_audio(temp_path)
-        except ValueError as e:
-            st.error(f"❌ {str(e)}")
-            st.stop()
-            
-        audio_info = get_audio_info(audio, sr)
-        
-        # 2. Ograniczenie czasu trwania audio (np. do 10 sekund)
         MAX_DURATION_SEC = 10.0
-        if audio_info['duration'] > MAX_DURATION_SEC:
+        
+        file_name = uploaded_file.name if hasattr(uploaded_file, 'name') else "audio.wav"
+        audio, sr, audio_info, was_trimmed, orig_audio_data = process_uploaded_audio(
+            uploaded_file.getvalue(), file_name, MAX_DURATION_SEC
+        )
+        
+        if was_trimmed:
             st.warning(f"⚠️ Wgrany utwór jest zbyt długi ({audio_info['duration']:.2f} s). W celu zapewnienia płynności działania aplikacji i rysowania wykresów, dźwięk został ucięty do pierwszych {int(MAX_DURATION_SEC)} sekund.")
-            audio = audio[:int(MAX_DURATION_SEC * sr)]
-            # Aktualizacja informacji o pliku po przycięciu
-            audio_info = get_audio_info(audio, sr)
         
         # Store in session state
         st.session_state.audio_data = (audio, sr)
-        
-        # Konwersja (potencjalnie uciętego) oryginalnego audio na bajty do odtwarzacza
-        orig_bytes = io.BytesIO()
-        sf.write(orig_bytes, audio, sr, format='WAV', subtype='PCM_16')
-        orig_audio_data = orig_bytes.getvalue()
         
         # Display audio info
         col1, col2, col3 = st.columns(3)
@@ -222,17 +203,14 @@ if uploaded_file is not None:
     # ====================================================================
     
     # Resolve STFT parameters based on selections
-    is_full_analysis = n_fft_selection == "Całość"
+    is_full_analysis = n_fft_selection == "Wszystkie próbki (FT)"
     n_fft = len(audio) if is_full_analysis else int(n_fft_selection)
     hop_length = len(audio) if is_full_analysis else int(hop_length_selection)
     window_type = 'boxcar' if is_full_analysis else 'hann'
     center_stft = False if is_full_analysis else True
     
     with st.spinner("Obliczanie STFT..."):
-        analyzer = STFTAnalyzer(n_fft=n_fft, hop_length=hop_length, window=window_type, center=center_stft)
-        stft_matrix = analyzer.compute_stft(audio, sr)
-        spec_db = analyzer.get_magnitude_spectrogram()
-        
+        analyzer, spec_db = compute_stft_cached(audio, sr, n_fft, hop_length, window_type, center_stft)
         st.session_state.analyzer = analyzer
         
     # Create visualizer
@@ -243,17 +221,23 @@ if uploaded_file is not None:
     st.plotly_chart(fig_wave, use_container_width=True)
     
     if is_full_analysis:
-        st.info("ℹ️ Wykres 3D jest niedostępny, gdy wybrano analizę 'Całość', ponieważ wynikiem jest pojedyncze widmo częstotliwości, a nie spektrogram w czasie.")
-        use_3d_main_spec = False
+        # For full analysis, show a 1D frequency spectrum plot
+        st.info("ℹ️ Wybrano analizę całego sygnału (FT). Wykres przedstawia widmo częstotliwości dla całego nagrania.")
+        fig_spec = visualizer.plot_frequency_spectrum(
+            magnitude_db_frame=spec_db[:, 0], # Take the single frame
+            sr=sr,
+            n_fft=n_fft,
+            title="Widmo częstotliwości (dB)"
+        )
     else:
+        # For STFT, show the 2D/3D spectrogram
         dim_main = st.segmented_control("Zmień wymiar", ["2D", "3D"], default="2D", key="main_spec_3d")
         use_3d_main_spec = dim_main == "3D"
-    
-    fig_spec = visualizer.plot_magnitude_spectrogram(
-        spec_db, sr, hop_length,
-        "Spektrogram amplitudowy (dB)",
-        use_3d=use_3d_main_spec
-    )
+        fig_spec = visualizer.plot_magnitude_spectrogram(
+            spec_db, sr, hop_length,
+            "Spektrogram amplitudowy (dB)",
+            use_3d=use_3d_main_spec
+        )
     st.plotly_chart(fig_spec, use_container_width=True)
     
     tab_synteza, tab_odszumianie = st.tabs(["🎛️ Synteza", "🧹 Odszumianie"])
@@ -274,7 +258,7 @@ if uploaded_file is not None:
         if not valid_options:
             valid_options = [1]
             
-        default_val = 100 if n_fft_selection == "Całość" else 25
+        default_val = 100 if is_full_analysis else 25
         if default_val not in valid_options:
             default_val = valid_options[-1]
             
@@ -380,16 +364,20 @@ if uploaded_file is not None:
         
         # Plots
         if is_full_analysis:
-            use_3d_gated_spec = False
+            fig_gated_spec = visualizer.plot_frequency_spectrum(
+                magnitude_db_frame=gated_spec_db[:, 0],
+                sr=sr,
+                n_fft=n_fft,
+                title="Odszumione widmo częstotliwości (dB)"
+            )
         else:
             dim_gated = st.segmented_control("Zmień wymiar", ["2D", "3D"], default="2D", key="gated_spec_3d")
             use_3d_gated_spec = dim_gated == "3D"
-        
-        fig_gated_spec = visualizer.plot_magnitude_spectrogram(
-            gated_spec_db, sr, hop_length,
-            "Odszumiony spektrogram amplitudowy (dB)",
-            use_3d=use_3d_gated_spec
-        )
+            fig_gated_spec = visualizer.plot_magnitude_spectrogram(
+                gated_spec_db, sr, hop_length,
+                "Odszumiony spektrogram amplitudowy (dB)",
+                use_3d=use_3d_gated_spec
+            )
         st.plotly_chart(fig_gated_spec, use_container_width=True)
         
         fig_triple_comp = visualizer.plot_triple_comparison(audio, gated_audio, noise_audio)

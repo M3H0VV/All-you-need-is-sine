@@ -119,14 +119,13 @@ class SinusoidalSynthesizer:
                 stft_copy[mask] = 0
 
         if num_sinusoids is not None:
-            # For each frame, keep only top N components
-            for frame_idx in range(stft_copy.shape[1]):
-                frame = np.abs(stft_copy[:, frame_idx])
-                
-                if num_sinusoids < len(frame):
-                    threshold = np.partition(frame, -num_sinusoids)[-num_sinusoids]
-                    mask = np.abs(stft_copy[:, frame_idx]) < threshold
-                    stft_copy[mask, frame_idx] = 0
+            # Vectorized approach: keep only top N components per frame
+            if num_sinusoids < stft_copy.shape[0]:
+                mags = np.abs(stft_copy)
+                # Znajdź próg odcięcia (threshold) dla każdej kolumny/ramki czasowej
+                thresholds = np.partition(mags, -num_sinusoids, axis=0)[-num_sinusoids, :]
+                mask = mags < thresholds[np.newaxis, :]
+                stft_copy[mask] = 0
 
         # Inverse STFT
         import librosa

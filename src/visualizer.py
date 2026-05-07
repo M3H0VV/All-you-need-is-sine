@@ -304,6 +304,44 @@ class Visualizer:
         
         return fig
 
+    def plot_frequency_spectrum(self, magnitude_db_frame: np.ndarray,
+                               sr: int, n_fft: int,
+                               title: str = "Widmo częstotliwości (dB)") -> go.Figure:
+        """
+        Create interactive 1D frequency spectrum plot from a single dB frame.
+
+        Args:
+            magnitude_db_frame: 1D array of magnitude values in dB.
+            sr: Sample rate.
+            n_fft: FFT size used to generate the frame.
+            title: Plot title.
+
+        Returns:
+            Plotly Figure object.
+        """
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=freqs,
+            y=magnitude_db_frame,
+            mode='lines',
+            name='Widmo',
+            line=dict(color='#1f77b4', width=1.5)
+        ))
+
+        fig.update_layout(
+            title=title,
+            xaxis_title="Częstotliwość (Hz)",
+            yaxis_title="Amplituda (dB)",
+            hovermode='x unified',
+            template='plotly_white',
+            height=500,
+            xaxis_range=[0, sr / 2]
+        )
+
+        return fig
+
     def plot_sinusoids_overlay(self, audio: np.ndarray,
                               sinusoids_list: List[Dict],
                               num_sinusoids: int,
