@@ -51,7 +51,8 @@ class Visualizer:
             yaxis_title="Amplituda",
             hovermode='x unified',
             template='plotly_white',
-            height=400
+            height=400,
+            dragmode='pan'
         )
         
         return fig
@@ -122,7 +123,8 @@ class Visualizer:
                 yaxis_range=[0, sr / 2],
                 template='plotly_white',
                 height=700,
-                margin=dict(l=60, r=40, t=60, b=60)
+                margin=dict(l=60, r=40, t=60, b=60),
+                dragmode='pan'
             )
         
         return fig
@@ -196,7 +198,8 @@ class Visualizer:
                 yaxis_range=[0, sr / 2],
                 template='plotly_white',
                 height=700,
-                margin=dict(l=60, r=40, t=60, b=60)
+                margin=dict(l=60, r=40, t=60, b=60),
+                dragmode='pan'
             )
         
         return fig
@@ -250,7 +253,8 @@ class Visualizer:
             hovermode='x unified',
             template='plotly_white',
             height=600,
-            showlegend=True
+            showlegend=True,
+            dragmode='pan'
         )
         
         return fig
@@ -299,7 +303,8 @@ class Visualizer:
             hovermode='x unified',
             template='plotly_white',
             height=800,
-            showlegend=True
+            showlegend=True,
+            dragmode='pan'
         )
         
         return fig
@@ -337,7 +342,8 @@ class Visualizer:
             hovermode='x unified',
             template='plotly_white',
             height=500,
-            xaxis_range=[0, sr / 2]
+            xaxis_range=[0, sr / 2],
+            dragmode='pan'
         )
 
         return fig
@@ -398,7 +404,8 @@ class Visualizer:
             yaxis_title="Amplituda",
             hovermode='x unified',
             template='plotly_white',
-            height=400
+            height=400,
+            dragmode='pan'
         )
         
         return fig
@@ -448,7 +455,8 @@ class Visualizer:
             xaxis_title="Częstotliwość (Hz)",
             yaxis_title="Amplituda",
             template='plotly_white',
-            height=400
+            height=400,
+            dragmode='pan'
         )
         
         return fig

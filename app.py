@@ -104,8 +104,13 @@ Miłego odkrywania! 🎵
 st.sidebar.header("🎚️ Parametry STFT")
 st.sidebar.markdown("Zmień parametry matematyczne analizy. Mniejsze okno to lepsza precyzja w czasie, większe - w częstotliwości.")
 
-n_fft_selection = st.sidebar.select_slider("Rozmiar okna (Window size) M", options=[512, 1024, 2048, 4096, 8192, "Wszystkie próbki (FT)"], value=2048)
-hop_length_selection = st.sidebar.select_slider("Długość skoku (Hop length) H", options=[256, 512, 1024], value=512)
+n_fft_selection = st.sidebar.select_slider("Rozmiar okna (Window size)", options=[256, 512, 1024, 2048, 4096, 8192, "Wszystkie próbki (FT)"], value=2048)
+overlap_selection = st.sidebar.select_slider(
+    "Procent nakładania się okien", 
+    options=["0%", "50%", "75%", "87.5%"], 
+    value="75%", 
+    help="Określa, w jakim stopniu okna analizy nakładają się na siebie. Większe nakładanie to płynniejszy obraz spektrogramu, ale wolniejsze obliczenia."
+)
 
 # ============================================================================
 # Main app
@@ -205,7 +210,19 @@ if uploaded_file is not None:
     # Resolve STFT parameters based on selections
     is_full_analysis = n_fft_selection == "Wszystkie próbki (FT)"
     n_fft = len(audio) if is_full_analysis else int(n_fft_selection)
-    hop_length = len(audio) if is_full_analysis else int(hop_length_selection)
+    
+    if is_full_analysis:
+        hop_length = len(audio)
+    else:
+        if overlap_selection == "0%":
+            hop_length = n_fft
+        elif overlap_selection == "50%":
+            hop_length = n_fft // 2
+        elif overlap_selection == "75%":
+            hop_length = n_fft // 4
+        else:  # "87.5%"
+            hop_length = n_fft // 8
+            
     window_type = 'boxcar' if is_full_analysis else 'hann'
     center_stft = False if is_full_analysis else True
     
