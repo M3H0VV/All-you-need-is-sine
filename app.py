@@ -107,9 +107,15 @@ st.sidebar.markdown("Zmień parametry matematyczne analizy. Mniejsze okno to lep
 n_fft_selection = st.sidebar.select_slider("Rozmiar okna (Window size)", options=[256, 512, 1024, 2048, 4096, 8192, "Wszystkie próbki (FT)"], value=2048)
 overlap_selection = st.sidebar.select_slider(
     "Procent nakładania się okien", 
-    options=["0%", "50%", "75%", "87.5%"], 
+    options=["0%", "25%", "50%", "75%", "87.5%"], 
     value="75%", 
     help="Określa, w jakim stopniu okna analizy nakładają się na siebie. Większe nakładanie to płynniejszy obraz spektrogramu, ale wolniejsze obliczenia."
+)
+window_selection = st.sidebar.selectbox(
+    "Funkcja okna (Window type)",
+    options=["hann", "hamming", "blackman", "boxcar"],
+    index=0,
+    help="Kształt okna ucinającego brzegi ramek. Różne okna oferują inny kompromis między precyzją częstotliwości (szerokość głównego piku) a poziomem przecieku widma na boki."
 )
 
 # ============================================================================
@@ -216,6 +222,8 @@ if uploaded_file is not None:
     else:
         if overlap_selection == "0%":
             hop_length = n_fft
+        elif overlap_selection == "25%":
+            hop_length = (n_fft * 3) // 4
         elif overlap_selection == "50%":
             hop_length = n_fft // 2
         elif overlap_selection == "75%":
@@ -223,7 +231,7 @@ if uploaded_file is not None:
         else:  # "87.5%"
             hop_length = n_fft // 8
             
-    window_type = 'boxcar' if is_full_analysis else 'hann'
+    window_type = window_selection
     center_stft = False if is_full_analysis else True
     
     with st.spinner("Obliczanie STFT..."):
